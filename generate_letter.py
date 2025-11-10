@@ -10,7 +10,7 @@ from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, PageBreak, Flowable
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, PageBreak
 
 # --- Configuration ---
 
@@ -39,7 +39,7 @@ else:
     pdfmetrics.registerFont(TTFont('Satoshi', FONT_REGULAR_PATH))
     pdfmetrics.registerFont(TTFont('Satoshi-Bold', FONT_BOLD_PATH))
 
-# Use registered Satoshi fonts when available, otherwise fall back to built-in fonts
+ # Use registered Satoshi fonts when available, otherwise fall back to built-in fonts
 if 'Satoshi' in pdfmetrics.getRegisteredFontNames():
     FONT_REGULAR_NAME = 'Satoshi'
 else:
@@ -50,145 +50,148 @@ if 'Satoshi-Bold' in pdfmetrics.getRegisteredFontNames():
 else:
     FONT_BOLD_NAME = 'Helvetica-Bold'
 
-# --- Custom Styles ---
 
+def draw_header_footer(canv, doc):
+    """Draw header and footer on each page using the canvas and doc.
+
+    This function is used as the onFirstPage/onLaterPages callback for
+    SimpleDocTemplate.build(...) so header/footer are drawn independently
+    from the story flowables and won't overlap the document content.
+    """
+    canv.saveState()
+
+    width, height = doc.pagesize
+
+    # --- Header ---
+    header_height = 40 * mm
+
+    # Cyan sidebar at top-left (short bar)
+    canv.setFillColor(COLOR_CYAN_TURQUOISE)
+    canv.rect(0, height - header_height, 10 * mm, header_height, stroke=0, fill=1)
+
+    # Logo (if present) placed near top-left inside page margins
+    draw_w = 0
+    draw_h = 0
+    if os.path.exists(LOGO_PATH):
+        try:
+            logo = ImageReader(LOGO_PATH)
+            logo_w, logo_h = logo.getSize()
+            aspect = logo_h / float(logo_w)
+            draw_w = 1.25 * inch
+            draw_h = draw_w * aspect
+            canv.drawImage(logo, 20 * mm, height - (1 * inch) - draw_h, width=draw_w, height=draw_h, mask='auto')
+        except Exception:
+            draw_w = 0
+            draw_h = 0
+
+    # Company name to the right of logo
+    try:
+        canv.setFont(FONT_REGULAR_NAME, 9)
+    except Exception:
+        canv.setFont('Helvetica', 9)
+    canv.setFillColor(COLOR_INDIGO)
+    canv.drawString(20 * mm + draw_w + (5 * mm), height - (1 * inch) - (draw_h / 2) + 5, "ACCESS DISCREETKIT LTD")
+
+    # Header separator line (below header area)
+    header_bottom = height - header_height - (3 * mm)
+    canv.setStrokeColor(COLOR_LIGHT_SILVER)
+    canv.setLineWidth(0.5)
+    canv.line(20 * mm, header_bottom, width - (20 * mm), header_bottom)
+
+    # --- Footer ---
+    footer_y = doc.bottomMargin - (6 * mm)
+    if footer_y < 12 * mm:
+        footer_y = 12 * mm
+
+    styles = get_letter_styles()
+    footer_style = styles['Footer']
+
+    # Column 1: Address (left)
+    address_text = """
+        <b>Address</b><br/>
+        House No. 57, Kofi Annan East Avenue,<br/>
+        Madina, Accra, Ghana
+    """
+    p_address = Paragraph(address_text, footer_style)
+    w_addr, h_addr = p_address.wrap(width / 3, doc.bottomMargin)
+    p_address.drawOn(canv, 20 * mm, footer_y)
+
+    # Column 2: Contact (center)
+    contact_text = """
+        <b>Contact</b><br/>
+        Email: discreetkit@gmail.com<br/>
+        Phone: +233 20 300 1107
+    """
+    p_contact = Paragraph(contact_text, footer_style)
+    w_con, h_con = p_contact.wrap(width / 3, doc.bottomMargin)
+    p_contact.drawOn(canv, (width / 2) - (w_con / 2), footer_y)
+
+    # Column 3: Social (right)
+    social_text = """
+        <b>Follow Us</b><br/>
+        Twitter: @discreetkit<br/>
+        LinkedIn: /company/discreetkit
+    """
+    p_social = Paragraph(social_text, footer_style)
+    w_soc, h_soc = p_social.wrap(width / 3, doc.bottomMargin)
+    p_social.drawOn(canv, width - (20 * mm) - w_soc, footer_y)
+
+    canv.restoreState()
+
+
+# --- Styles ---
 def get_letter_styles():
-    """Returns a stylesheet library for the document."""
+    """Returns a stylesheet configured for the letter.
+
+    This updates existing named styles when present to avoid duplicate
+    KeyError from reportlab's stylesheet when called multiple times.
+    """
     styles = getSampleStyleSheet()
 
-    # Update the existing Normal style rather than re-adding it (avoids duplicate-name errors)
+    # Update base Normal style
     styles['Normal'].fontName = FONT_REGULAR_NAME
     styles['Normal'].fontSize = 10
     styles['Normal'].leading = 14
     styles['Normal'].textColor = COLOR_INDIGO
 
-    # Helper: add a style if it doesn't exist, otherwise update attributes
-    def add_or_update_style(stylesheet, name, **style_kwargs):
-        if name in stylesheet:
-            st = stylesheet[name]
-            # apply attributes where possible
-            for k, v in style_kwargs.items():
-                try:
-                    setattr(st, k, v)
-                except Exception:
-                    # ignore unknown attrs
-                    pass
-        else:
-            stylesheet.add(ParagraphStyle(name=name, **style_kwargs))
+    # Recipient
+    if 'Recipient' in styles:
+        styles['Recipient'].spaceBefore = 10
+    else:
+        styles.add(ParagraphStyle(name='Recipient', parent=styles['Normal'], spaceBefore=10))
 
-    add_or_update_style(styles, 'Recipient', parent=styles['Normal'], spaceBefore=10)
-    add_or_update_style(styles, 'Date', parent=styles['Normal'], alignment=TA_RIGHT)
-    add_or_update_style(styles, 'Heading1', parent=styles['Normal'], fontName=FONT_BOLD_NAME,
-                        fontSize=18, textColor=COLOR_INDIGO, spaceBefore=12, spaceAfter=6)
-    add_or_update_style(styles, 'Body', parent=styles['Normal'], spaceAfter=12)
-    add_or_update_style(styles, 'Footer', parent=styles['Normal'], fontName=FONT_REGULAR_NAME,
-                        fontSize=8, leading=10, textColor=COLOR_INDIGO)
+    # Date
+    if 'Date' in styles:
+        styles['Date'].alignment = TA_RIGHT
+    else:
+        styles.add(ParagraphStyle(name='Date', parent=styles['Normal'], alignment=TA_RIGHT))
+
+    # Heading1
+    if 'Heading1' in styles:
+        styles['Heading1'].fontName = FONT_BOLD_NAME
+        styles['Heading1'].fontSize = 18
+        styles['Heading1'].textColor = COLOR_INDIGO
+        styles['Heading1'].spaceBefore = 12
+        styles['Heading1'].spaceAfter = 6
+    else:
+        styles.add(ParagraphStyle(name='Heading1', parent=styles['Normal'], fontName=FONT_BOLD_NAME, fontSize=18, textColor=COLOR_INDIGO, spaceBefore=12, spaceAfter=6))
+
+    # Body
+    if 'Body' in styles:
+        styles['Body'].spaceAfter = 12
+    else:
+        styles.add(ParagraphStyle(name='Body', parent=styles['Normal'], spaceAfter=12))
+
+    # Footer
+    if 'Footer' in styles:
+        styles['Footer'].fontName = FONT_REGULAR_NAME
+        styles['Footer'].fontSize = 8
+        styles['Footer'].leading = 10
+        styles['Footer'].textColor = COLOR_INDIGO
+    else:
+        styles.add(ParagraphStyle(name='Footer', parent=styles['Normal'], fontName=FONT_REGULAR_NAME, fontSize=8, leading=10, textColor=COLOR_INDIGO))
 
     return styles
-
-# --- Header/Footer Drawing Functions ---
-
-class HeaderFooter(Flowable):
-    """
-    A flowable to draw header and footer content. This is used to
-    ensure elements are drawn *under* the main content flow.
-    """
-    def __init__(self):
-        Flowable.__init__(self)
-        self.width, self.height = A4
-        # Check for logo
-        self.logo = None
-        # default draw sizes in case logo missing
-        self._draw_w = 0
-        self._draw_h = 0
-        if os.path.exists(LOGO_PATH):
-            self.logo = ImageReader(LOGO_PATH)
-        else:
-            print(f"Warning: Logo file not found at '{LOGO_PATH}'. Header will not include logo.")
-
-    def wrap(self, *args):
-        # Doesn't take up space in the story
-        return (0, 0)
-
-    def draw(self):
-        self.canv.saveState()
-        
-        # --- Header Elements ---
-        
-        # 1. Cyan sidebar (thinner, as recommended)
-        self.canv.setFillColor(COLOR_CYAN_TURQUOISE)
-        self.canv.rect(0, 0, 10 * mm, self.height, stroke=0, fill=1)
-        
-        # 2. Logo
-        if self.logo:
-            # Draw logo at 1 inch from top, 1 inch from left (plus sidebar)
-            # Assuming logo is 1.5 inch wide, 0.5 inch high. Adjust as needed.
-            logo_w, logo_h = self.logo.getSize()
-            aspect = logo_h / float(logo_w)
-            draw_w = 1.25 * inch
-            draw_h = draw_w * aspect
-            # store for use later (company name positioning)
-            self._draw_w = draw_w
-            self._draw_h = draw_h
-            # Position inside left margin (set in SimpleDocTemplate)
-            self.canv.drawImage(self.logo, 20 * mm, self.height - (1 * inch) - draw_h, 
-                                width=draw_w, height=draw_h, mask='auto')
-
-        # 3. Company Name (if not part of logo)
-        # Use the resolved font names (fallbacks applied earlier)
-        try:
-            self.canv.setFont(FONT_REGULAR_NAME, 9)
-        except Exception:
-            # final fallback to a built-in font name
-            self.canv.setFont('Helvetica', 9)
-        self.canv.setFillColor(COLOR_INDIGO)
-        # Use stored draw size values (0 if logo missing)
-        self.canv.drawString(20 * mm + self._draw_w + (5 * mm), self.height - (1 * inch) - (self._draw_h / 2) + 5, 
-                             "ACCESS DISCREETKIT LTD")
-
-        # --- Footer Elements ---
-        footer_y = 1 * inch
-        
-        # 1. Horizontal Rule
-        self.canv.setStrokeColor(COLOR_LIGHT_SILVER)
-        self.canv.setLineWidth(0.5)
-        self.canv.line(20 * mm, footer_y, self.width - (20 * mm), footer_y)
-
-        # 2. Footer Content (Two-Column)
-        styles = get_letter_styles()
-        footer_style = styles['Footer']
-        
-        # Column 1: Address
-        address_text = """
-            <b>Address</b><br/>
-            House No. 57, Kofi Annan East Avenue,<br/>
-            Madina, Accra, Ghana
-        """
-        p_address = Paragraph(address_text, footer_style)
-        w, h = p_address.wrapOn(self.canv, self.width / 2 - (25 * mm), footer_y)
-        p_address.drawOn(self.canv, 20 * mm, footer_y - h - (3 * mm))
-        
-        # Column 2: Contact
-        contact_text = """
-            <b>Contact</b><br/>
-            Email: discreetkit@gmail.com<br/>
-            Phone: +233 20 300 1107
-        """
-        p_contact = Paragraph(contact_text, footer_style)
-        w, h = p_contact.wrapOn(self.canv, self.width / 3, footer_y)
-        p_contact.drawOn(self.canv, self.width / 2, footer_y - h - (3 * mm))
-
-        # Column 3: Social (if needed)
-        social_text = """
-            <b>Follow Us</b><br/>
-            Twitter: @discreetkit<br/>
-            LinkedIn: /company/discreetkit
-        """
-        p_social = Paragraph(social_text, footer_style)
-        w, h = p_social.wrapOn(self.canv, self.width / 3, footer_y)
-        p_social.drawOn(self.canv, self.width - (20 * mm) - w, footer_y - h - (3 * mm))
-
-        self.canv.restoreState()
 
 
 # --- Main Document Generation ---
@@ -204,17 +207,18 @@ def generate_document(filename, content):
     # --- Page Setup ---
     # We use a large top margin for the logo/header area
     # and a large left margin for the cyan bar.
+    # FIXED: Increased topMargin to 2.0 inch for taller header
     doc = SimpleDocTemplate(
         filename,
         pagesize=A4,
-        topMargin=1.5 * inch,
+        topMargin=2.0 * inch,
         bottomMargin=1.25 * inch,
         leftMargin=20 * mm, # Main content margin
         rightMargin=20 * mm
     )
     styles = get_letter_styles()
-    story: List[Flowable] = [HeaderFooter()]  # Add the header/footer flowable first
-    story = [HeaderFooter()] # Add the header/footer flowable first
+    # story holds the document flowables (paragraphs, spacers, etc.)
+    story = []
 
     # --- Build Story ---
 
@@ -253,7 +257,8 @@ def generate_document(filename, content):
         
     # --- Generate PDF ---
     try:
-        doc.build(story)
+        # Draw header/footer via callbacks so they don't overlap story content
+        doc.build(story, onFirstPage=draw_header_footer, onLaterPages=draw_header_footer)
         print(f"Successfully generated '{filename}'")
     except Exception as e:
         print(f"Error generating PDF: {e}")
