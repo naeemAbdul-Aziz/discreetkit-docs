@@ -98,39 +98,65 @@ def draw_header_footer(canv, doc):
     width, height = doc.pagesize
 
     # --- Header ---
-    header_height = 40 * mm
+    header_height = 32 * mm  # Accommodates balanced layout
 
-    # Cyan sidebar at top-left
+    # Streamlined cyan sidebar - minimal accent only
     canv.setFillColor(COLOR_CYAN_TURQUOISE)
-    canv.rect(0, height - header_height, 10 * mm, header_height, stroke=0, fill=1)
+    canv.rect(0, height - header_height, 8 * mm, header_height, stroke=0, fill=1)
 
-    # Logo
+    # Logo - larger and proportionate to brand text block
     draw_w = 0
     draw_h = 0
+    logo_x_offset = doc.leftMargin + 3 * mm
     if os.path.exists(LOGO_PATH):
         try:
             logo = ImageReader(LOGO_PATH)
             logo_w, logo_h = logo.getSize()
             aspect = logo_h / float(logo_w)
-            draw_w = 1.25 * inch
+            # Increased logo size to be proportionate with text stack height
+            draw_w = 1.4 * inch  # Larger for better proportion with text block
             draw_h = draw_w * aspect
-            canv.drawImage(logo, doc.leftMargin, height - (1 * inch) - draw_h, width=draw_w, height=draw_h, mask='auto')
+            # Center logo vertically in header
+            logo_y = height - (header_height / 2) - (draw_h / 2)
+            canv.drawImage(logo, logo_x_offset, logo_y, width=draw_w, height=draw_h, mask='auto')
         except Exception:
             draw_w = 0
             draw_h = 0
 
-    # Company name
+    # Brand text positioned at right margin - balanced layout
+    page_width = width
+    right_margin_x = page_width - doc.rightMargin
+    
+    # Company Name - right-aligned at margin
+    company_name_y = height - (header_height / 2) + (4 * mm)
     try:
-        canv.setFont(FONT_REGULAR_NAME, 9)
+        canv.setFont(FONT_BOLD_NAME, 12)
+        company_name_width = canv.stringWidth("ACCESS DISCREETKIT LTD", FONT_BOLD_NAME, 12)
     except Exception:
-        canv.setFont('Helvetica', 9)
+        canv.setFont('Helvetica-Bold', 12)
+        company_name_width = canv.stringWidth("ACCESS DISCREETKIT LTD", 'Helvetica-Bold', 12)
+    
+    company_name_x = right_margin_x - company_name_width
     canv.setFillColor(COLOR_INDIGO)
-    canv.drawString(doc.leftMargin + draw_w + (5 * mm), height - (1 * inch) - (draw_h / 2) + 5, "ACCESS DISCREETKIT LTD")
+    canv.drawString(company_name_x, company_name_y, "ACCESS DISCREETKIT LTD")
+    
+    # Tagline - right-aligned below company name
+    tagline_y = company_name_y - (6 * mm)
+    try:
+        canv.setFont(FONT_REGULAR_NAME, 10)
+        tagline_width = canv.stringWidth("Skip the Awkward", FONT_REGULAR_NAME, 10)
+    except Exception:
+        canv.setFont('Helvetica', 10)
+        tagline_width = canv.stringWidth("Skip the Awkward", 'Helvetica', 10)
+    
+    tagline_x = right_margin_x - tagline_width
+    canv.setFillColor(COLOR_AZTEC_GOLD)
+    canv.drawString(tagline_x, tagline_y, "Skip the Awkward")
 
-    # Header separator
-    header_bottom = height - header_height - (3 * mm)
+    # Separator line beneath complete layout
+    header_bottom = height - header_height - (2 * mm)
     canv.setStrokeColor(COLOR_LIGHT_SILVER)
-    canv.setLineWidth(0.5)
+    canv.setLineWidth(1)  # Clean, professional line
     canv.line(doc.leftMargin, header_bottom, width - doc.rightMargin, header_bottom)
 
     # --- Footer ---
@@ -176,7 +202,7 @@ def generate_document(filename: str, content: dict):
     doc = SimpleDocTemplate(
         filename,
         pagesize=A4,
-        topMargin=2.0 * inch,
+        topMargin=1.6 * inch,  # Adjusted for slightly taller stacked header
         bottomMargin=1.25 * inch,
         leftMargin=20 * mm,
         rightMargin=20 * mm,
